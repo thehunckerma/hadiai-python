@@ -1,8 +1,12 @@
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, File
+from fastapi import FastAPI, File, WebSocket, UploadFile
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import numpy as np
 import uvicorn
 import base64
+import shutil
+import uuid
 import cv2
 import io
 import os
@@ -17,13 +21,71 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
+html = """
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Chat</title>
+    </head>
+    <body>
+        <h1>WebSocket Chat</h1>
+        <form action="" onsubmit="sendMessage(event)">
+            <input type="text" id="messageText" autocomplete="off"/>
+            <button>Send</button>
+        </form>
+        <ul id='messages'>
+        </ul>
+        <script>
+            var ws = new WebSocket("ws://localhost:8000/ws");
+            ws.onmessage = function(event) {
+                var messages = document.getElementById('messages')
+                var message = document.createElement('li')
+                var content = document.createTextNode(event.data)
+                message.appendChild(content)
+                messages.appendChild(message)
+            };
+            function sendMessage(event) {
+                var input = document.getElementById("messageText")
+                ws.send(input.value)
+                input.value = ''
+                event.preventDefault()
+            }
+        </script>
+    </body>
+</html>
+"""
 
-@api.post("/")
+
+@api.get("/")
+async def get():
+    return HTMLResponse(html)
+
+
+@api.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        await websocket.send_text(f"Message text was: {data}")
+
+
+@api.post("/detect")
 async def predict(image: bytes = File(...)):
 
     data = detect_face(image)
 
     return data
+
+api.mount("/images", StaticFiles(directory="images"), name="images")
+
+
+@api.post("/upload")
+async def image(image: UploadFile = File(...)):
+    filename = str(uuid.uuid4()) + '.jpg'
+    path = os.path.join('images', filename)
+    with open(path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+    return {"uuid": filename}
 
 
 def detect_face(binaryimg):
@@ -37,7 +99,7 @@ def detect_face(binaryimg):
     # convert the image to grayscale
     imagegray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    # load the face cascade detector,
+    # load the face cascade detector
     facecascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
     # detect faces in the image

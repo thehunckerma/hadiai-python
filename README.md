@@ -12,6 +12,7 @@ conda install -c conda-forge uvicorn
 conda install -c conda-forge opencv
 conda install -c anaconda numpy
 conda install -c conda-forge python-multipart
+conda install -c anaconda aiofiles
 ```
 
 ### Start server :
