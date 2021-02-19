@@ -5,8 +5,9 @@
 Run
 
 ```
-conda create -n face-detection python=3
-conda activate face-detection
+conda create -n hadiai python=3
+conda activate hadiai
+conda install pillow
 conda install -c conda-forge fastapi
 conda install -c conda-forge uvicorn
 conda install -c conda-forge opencv

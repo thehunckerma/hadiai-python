@@ -1,15 +1,18 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, File, WebSocket, UploadFile
-from fastapi.responses import HTMLResponse
+from PIL import Image, ImageDraw, ImageFilter
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 import numpy as np
 import uvicorn
 import base64
 import shutil
+import glob
 import uuid
 import cv2
 import io
 import os
+
 
 api = FastAPI()
 
@@ -85,7 +88,25 @@ async def image(image: UploadFile = File(...)):
     path = os.path.join('images', filename)
     with open(path, "wb") as buffer:
         shutil.copyfileobj(image.file, buffer)
+    open_image = Image.open(path)
+    rgb_im = open_image.convert('RGB')
+    cropped_image = crop_center_square(rgb_im)
+    cropped_image.save(path, quality=95)
     return {"uuid": filename}
+
+
+def crop_center_square(pil_img):
+    img_width, img_height = pil_img.size
+
+    if img_width > img_height:
+        crop_size = img_height
+    else:
+        crop_size = img_width
+
+    return pil_img.crop(((img_width - crop_size) // 2,
+                         (img_height - crop_size) // 2,
+                         (img_width + crop_size) // 2,
+                         (img_height + crop_size) // 2))
 
 
 def detect_face(binaryimg):
