@@ -13,6 +13,8 @@ import cv2
 import io
 import os
 
+if not os.path.exists('images'):
+    os.makedirs('images')
 
 api = FastAPI()
 
