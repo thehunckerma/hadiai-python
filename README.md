@@ -14,6 +14,10 @@ conda install -c conda-forge opencv
 conda install -c anaconda numpy
 conda install -c conda-forge python-multipart
 conda install -c anaconda aiofiles
+conda install -c conda-forge dlib
+conda install -c conda-forge face_recognition
+conda install -c akode face_recognition_models
+conda install -c anaconda requests
 ```
 
 ### Start server :
@@ -29,3 +33,10 @@ Using Insomnia/Postman send a post request to http://127.0.0.1:8000/ with the fo
 name => "image"
 
 value => File
+
+### Face_Recognitation
+
+Python API development for Face Recognition usig CNN and OPENCV(Cv2)
+Recognize and manipulate faces from Python or from the command line with
+the world’s simplest face recognition library.
+Built using dlib’s state-of-the-art face recognition

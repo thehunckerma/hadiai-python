@@ -1,20 +1,25 @@
+from fastapi import FastAPI, File, UploadFile, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, File, WebSocket, UploadFile
-from PIL import Image, ImageDraw, ImageFilter
+from fastapi.security import OAuth2PasswordBearer
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from PIL import Image
 import numpy as np
 import uvicorn
 import base64
 import shutil
-import glob
 import uuid
 import cv2
 import io
 import os
 
+import face_recognition
+import json
+import requests
+
 if not os.path.exists('images'):
     os.makedirs('images')
+if not os.path.exists('images_tmp'):
+    os.makedirs('images_tmp')
 
 api = FastAPI()
 
@@ -26,60 +31,39 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
-html = """
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Chat</title>
-    </head>
-    <body>
-        <h1>WebSocket Chat</h1>
-        <form action="" onsubmit="sendMessage(event)">
-            <input type="text" id="messageText" autocomplete="off"/>
-            <button>Send</button>
-        </form>
-        <ul id='messages'>
-        </ul>
-        <script>
-            var ws = new WebSocket("ws://localhost:8000/ws");
-            ws.onmessage = function(event) {
-                var messages = document.getElementById('messages')
-                var message = document.createElement('li')
-                var content = document.createTextNode(event.data)
-                message.appendChild(content)
-                messages.appendChild(message)
-            };
-            function sendMessage(event) {
-                var input = document.getElementById("messageText")
-                ws.send(input.value)
-                input.value = ''
-                event.preventDefault()
-            }
-        </script>
-    </body>
-</html>
-"""
-
-
-@api.get("/")
-async def get():
-    return HTMLResponse(html)
-
-
-@api.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        await websocket.send_text(f"Message text was: {data}")
-
 
 @api.post("/detect")
 async def predict(image: bytes = File(...)):
+    return detect_face(image)
 
-    data = detect_face(image)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-    return data
+
+@api.post("/recognize/{section_id}/{image_uuid}")
+async def recognize(section_id, image_uuid, image: UploadFile = File(...), token: str = Depends(oauth2_scheme)):
+    detected = recognizer(image_uuid, image)
+    message = ""
+
+    if detected:
+        resp = requests.get("http://localhost:8080/api/account",
+                            headers={"Authorization": "Bearer " + token})
+        if resp.status_code == 200:
+            user_id = resp.json()['id']
+            if user_id > 0:
+                _resp = requests.get(
+                    "http://localhost:8080/api/python/presence/" + str(section_id) + "/" + str(user_id))
+                if _resp.status_code == 201:
+                    return {"success": True, "message": "Successfully marked present"}
+                else:
+                    message = "Couldn't mark presence"
+            else:
+                message = "Couldn't get user account ID"
+        else:
+            message = "Couldn't get user account information"
+    else:
+        message = "Couldn't recognize user's face"
+
+    return {"success": False, "message": message}
 
 api.mount("/images", StaticFiles(directory="images"), name="images")
 
@@ -165,6 +149,29 @@ def draw_found_faces(detected, image, color: tuple):
             color,
             thickness=2
         )
+
+
+def recognizer(image_uuid, image):
+
+    unknown_image_path = os.path.join('images_tmp', image_uuid)
+    known_image_path = os.path.join("images", image_uuid)
+
+    with open(unknown_image_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+
+    known_image = face_recognition.load_image_file(known_image_path)
+    known_face_encodings = face_recognition.face_encodings(known_image)
+
+    unknown_image = face_recognition.load_image_file(unknown_image_path)
+    unknown_face_encodings = face_recognition.face_encodings(unknown_image)
+
+    detected = False
+    if len(unknown_face_encodings) > 0:
+        for encoding in unknown_face_encodings:
+            if face_recognition.compare_faces(
+                    known_face_encodings, encoding, 0):
+                detected = True
+    return detected
 
 
 if __name__ == '__main__':
